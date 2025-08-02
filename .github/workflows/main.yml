@@ -131,6 +131,6 @@ jobs:
       with:
         files: |
           artifacts/axel-*.ipk
-        tag_name: ${{ github.ref }}
+        tag_name: ${{ github.ref_name }}
         body: "Axel download accelerator built for ImmortalWrt"
         generate_release_notes: true
