@@ -41,17 +41,19 @@ jobs:
           unzip \
           zstd \
           python3 \
-          jq
+          jq \
+          autoconf \
+          automake \
+          libtool \
+          file
     
     - name: Set SDK URLs
       id: set-sdk
       run: |
         if [ "${{ matrix.platform }}" = "x86_64" ]; then
           echo "sdk_url=https://downloads.immortalwrt.org/releases/24.10.2/targets/x86/64/immortalwrt-sdk-24.10.2-x86-64_gcc-13.3.0_musl.Linux-x86_64.tar.zst" >> $GITHUB_OUTPUT
-          echo "output_path=bin/packages/x86_64/base" >> $GITHUB_OUTPUT
         elif [ "${{ matrix.platform }}" = "mediatek_filogic" ]; then
           echo "sdk_url=https://downloads.immortalwrt.org/releases/24.10.2/targets/mediatek/filogic/immortalwrt-sdk-24.10.2-mediatek-filogic_gcc-13.3.0_musl.Linux-x86_64.tar.zst" >> $GITHUB_OUTPUT
-          echo "output_path=bin/packages/mediatek/filogic/base" >> $GITHUB_OUTPUT
         fi
     
     - name: Download and extract SDK
@@ -65,6 +67,7 @@ jobs:
       run: |
         mkdir -p sdk-${{ matrix.platform }}/package/axel
         cp -R package/axel/Makefile sdk-${{ matrix.platform }}/package/axel/
+        echo "src-link axel $(pwd)/package" >> sdk-${{ matrix.platform }}/feeds.conf
     
     - name: Set up SDK environment
       run: |
@@ -73,19 +76,47 @@ jobs:
         ./scripts/feeds install -a
         make defconfig
     
+    - name: Clean cache before build
+      run: |
+        cd sdk-${{ matrix.platform }}
+        make package/axel/clean
+    
     - name: Build axel package
       run: |
         cd sdk-${{ matrix.platform }}
         make package/axel/compile V=s -j$(nproc)
+        
+        # 调试：列出可能的输出目录
+        echo "Possible output directories:"
+        find bin -type d -name "base" 2>/dev/null || true
     
     - name: Collect artifacts
       run: |
         mkdir -p artifacts
-        # 使用平台名重命名文件
-        cp sdk-${{ matrix.platform }}/${{ steps.set-sdk.outputs.output_path }}/axel_*.ipk \
-          artifacts/axel-${{ matrix.platform }}.ipk
+        
+        # 更灵活的文件查找
+        find sdk-${{ matrix.platform }} -name "axel_*.ipk" -exec cp {} artifacts/axel-${{ matrix.platform }}.ipk \;
+        
+        # 如果找不到，尝试其他常见路径
+        if [ ! -f artifacts/axel-${{ matrix.platform }}.ipk ]; then
+          echo "Trying alternative paths..."
+          cp sdk-${{ matrix.platform }}/bin/packages/*/base/axel_*.ipk artifacts/axel-${{ matrix.platform }}.ipk || true
+          cp sdk-${{ matrix.platform }}/bin/targets/*/*/packages/axel_*.ipk artifacts/axel-${{ matrix.platform }}.ipk || true
+        fi
+        
+        # 验证文件存在
+        if [ ! -f artifacts/axel-${{ matrix.platform }}.ipk ]; then
+          echo "##[error]No IPK file found for ${{ matrix.platform }}"
+          echo "##[group]Directory structure"
+          find sdk-${{ matrix.platform }} -name "axel*" -o -name "*.ipk"
+          echo "##[endgroup]"
+          exit 1
+        fi
+        
+        # 显示文件信息
+        file artifacts/axel-${{ matrix.platform }}.ipk
     
-    - name: Upload artifacts (v4)
+    - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
         name: axel-packages
