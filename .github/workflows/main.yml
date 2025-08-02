@@ -45,7 +45,8 @@ jobs:
           autoconf \
           automake \
           libtool \
-          file
+          file \
+          pkg-config
     
     - name: Set SDK URLs
       id: set-sdk
@@ -67,7 +68,7 @@ jobs:
       run: |
         mkdir -p sdk-${{ matrix.platform }}/package/axel
         cp -R package/axel/Makefile sdk-${{ matrix.platform }}/package/axel/
-    
+
     - name: Set up SDK environment
       run: |
         cd sdk-${{ matrix.platform }}
@@ -75,50 +76,37 @@ jobs:
         ./scripts/feeds install -a
         make defconfig
     
-    - name: Clean cache before build
+    - name: Debug - Check OpenSSL
       run: |
         cd sdk-${{ matrix.platform }}
-        make package/axel/clean
+        echo "STAGING_DIR: $(pwd)/staging_dir"
+        find staging_dir -name ssl.h || true
+        find staging_dir -name libssl.so || true
+        find staging_dir -name openssl.pc || true
     
     - name: Build axel package
       run: |
         cd sdk-${{ matrix.platform }}
         make package/axel/compile V=s -j$(nproc)
-        
-        # 调试：列出可能的输出目录
-        echo "Possible output directories:"
-        find bin -type d -name "base" 2>/dev/null || true
     
     - name: Collect artifacts
       run: |
         mkdir -p artifacts
         
-        # 更灵活的文件查找
+        # 查找 IPK 文件
         find sdk-${{ matrix.platform }} -name "axel_*.ipk" -exec cp {} artifacts/axel-${{ matrix.platform }}.ipk \;
-        
-        # 如果找不到，尝试其他常见路径
-        if [ ! -f artifacts/axel-${{ matrix.platform }}.ipk ]; then
-          echo "Trying alternative paths..."
-          cp sdk-${{ matrix.platform }}/bin/packages/*/base/axel_*.ipk artifacts/axel-${{ matrix.platform }}.ipk || true
-          cp sdk-${{ matrix.platform }}/bin/targets/*/*/packages/axel_*.ipk artifacts/axel-${{ matrix.platform }}.ipk || true
-        fi
         
         # 验证文件存在
         if [ ! -f artifacts/axel-${{ matrix.platform }}.ipk ]; then
           echo "##[error]No IPK file found for ${{ matrix.platform }}"
-          echo "##[group]Directory structure"
-          find sdk-${{ matrix.platform }} -name "axel*" -o -name "*.ipk"
-          echo "##[endgroup]"
+          find sdk-${{ matrix.platform }} -name "axel*" -o -name "*.ipk" || true
           exit 1
         fi
-        
-        # 显示文件信息
-        file artifacts/axel-${{ matrix.platform }}.ipk
     
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: axel-packages
+        name: axel-${{ matrix.platform }}-package
         path: artifacts/axel-${{ matrix.platform }}.ipk
         retention-days: 7
 
@@ -132,8 +120,12 @@ jobs:
     - name: Download all artifacts
       uses: actions/download-artifact@v4
       with:
-        name: axel-packages
         path: artifacts
+        pattern: axel-*-package
+        merge-multiple: true
+    
+    - name: List downloaded artifacts
+      run: ls -lh artifacts
     
     - name: Create release
       uses: softprops/action-gh-release@v1
