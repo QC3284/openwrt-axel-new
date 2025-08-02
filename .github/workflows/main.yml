@@ -13,7 +13,6 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        # 使用基本类型值作为矩阵选项
         platform: [ "x86_64", "mediatek_filogic" ]
     
     steps:
@@ -41,7 +40,8 @@ jobs:
           wget \
           unzip \
           zstd \
-          python3
+          python3 \
+          jq
     
     - name: Set SDK URLs
       id: set-sdk
@@ -83,14 +83,16 @@ jobs:
     
     - name: Collect artifacts
       run: |
-        mkdir -p artifacts/${{ matrix.platform }}
-        cp sdk-${{ matrix.platform }}/${{ steps.set-sdk.outputs.output_path }}/axel_*.ipk artifacts/${{ matrix.platform }}/
+        mkdir -p artifacts
+        # 使用平台名重命名文件
+        cp sdk-${{ matrix.platform }}/${{ steps.set-sdk.outputs.output_path }}/axel_*.ipk \
+          artifacts/axel-${{ matrix.platform }}.ipk
     
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v3
+    - name: Upload artifacts (v4)
+      uses: actions/upload-artifact@v4
       with:
-        name: axel-${{ matrix.platform }}-ipk
-        path: artifacts/${{ matrix.platform }}/
+        name: axel-packages
+        path: artifacts/axel-${{ matrix.platform }}.ipk
         retention-days: 7
 
   release:
@@ -101,15 +103,16 @@ jobs:
     
     steps:
     - name: Download all artifacts
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
+        name: axel-packages
         path: artifacts
     
     - name: Create release
       uses: softprops/action-gh-release@v1
       with:
         files: |
-          artifacts/x86_64/*.ipk
-          artifacts/mediatek_filogic/*.ipk
+          artifacts/axel-*.ipk
         tag_name: ${{ github.ref }}
         body: "Axel download accelerator built for ImmortalWrt"
+        generate_release_notes: true
