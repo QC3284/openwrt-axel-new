@@ -14,7 +14,7 @@ PKG_RELEASE:=1
 
 PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.gz
 PKG_SOURCE_URL:=https://github.com/axel-download-accelerator/axel/releases/download/v$(PKG_VERSION)/
-PKG_HASH:=d5a1e6a9a7d9c1b8b6d7c9a0b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4
+PKG_HASH:=575f73f640ee836a95d27b54aeed216c45bc1e914cad92da6f00b907d1c94925
 
 PKG_MAINTAINER:=Gianluigi Tiesi <sherpya@netfarm.it>
 PKG_LICENSE:=GPL-2.0
