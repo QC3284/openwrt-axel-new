@@ -1,0 +1,115 @@
+name: Build Axel for ImmortalWrt
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-axel:
+    name: Build Axel Package
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        # 使用基本类型值作为矩阵选项
+        platform: [ "x86_64", "mediatek_filogic" ]
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+      with:
+        platforms: arm64
+      if: matrix.platform == 'mediatek_filogic'
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          libncurses-dev \
+          zlib1g-dev \
+          gawk \
+          git \
+          gettext \
+          libssl-dev \
+          rsync \
+          wget \
+          unzip \
+          zstd \
+          python3
+    
+    - name: Set SDK URLs
+      id: set-sdk
+      run: |
+        if [ "${{ matrix.platform }}" = "x86_64" ]; then
+          echo "sdk_url=https://downloads.immortalwrt.org/releases/24.10.2/targets/x86/64/immortalwrt-sdk-24.10.2-x86-64_gcc-13.3.0_musl.Linux-x86_64.tar.zst" >> $GITHUB_OUTPUT
+          echo "output_path=bin/packages/x86_64/base" >> $GITHUB_OUTPUT
+        elif [ "${{ matrix.platform }}" = "mediatek_filogic" ]; then
+          echo "sdk_url=https://downloads.immortalwrt.org/releases/24.10.2/targets/mediatek/filogic/immortalwrt-sdk-24.10.2-mediatek-filogic_gcc-13.3.0_musl.Linux-x86_64.tar.zst" >> $GITHUB_OUTPUT
+          echo "output_path=bin/packages/mediatek/filogic/base" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Download and extract SDK
+      run: |
+        mkdir -p sdk-${{ matrix.platform }}
+        wget ${{ steps.set-sdk.outputs.sdk_url }} -O sdk.tar.zst
+        tar -xaf sdk.tar.zst -C sdk-${{ matrix.platform }} --strip-components=1
+        rm sdk.tar.zst
+    
+    - name: Prepare package directory
+      run: |
+        mkdir -p sdk-${{ matrix.platform }}/package/axel
+        cp -R package/axel/Makefile sdk-${{ matrix.platform }}/package/axel/
+        
+        # 添加包到 feeds
+        echo "src-link axel $(pwd)/package" >> sdk-${{ matrix.platform }}/feeds.conf
+    
+    - name: Set up SDK environment
+      run: |
+        cd sdk-${{ matrix.platform }}
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+        make defconfig
+    
+    - name: Build axel package
+      run: |
+        cd sdk-${{ matrix.platform }}
+        make package/axel/compile V=s -j$(nproc)
+    
+    - name: Collect artifacts
+      run: |
+        mkdir -p artifacts/${{ matrix.platform }}
+        cp sdk-${{ matrix.platform }}/${{ steps.set-sdk.outputs.output_path }}/axel_*.ipk artifacts/${{ matrix.platform }}/
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: axel-${{ matrix.platform }}-ipk
+        path: artifacts/${{ matrix.platform }}/
+        retention-days: 7
+
+  release:
+    name: Create Release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-22.04
+    needs: build-axel
+    
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+      with:
+        path: artifacts
+    
+    - name: Create release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          artifacts/x86_64/*.ipk
+          artifacts/mediatek_filogic/*.ipk
+        tag_name: ${{ github.ref }}
+        body: "Axel download accelerator built for ImmortalWrt"
