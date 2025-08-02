@@ -1,3 +1,11 @@
+#
+# Copyright (C) 2010-2011 OpenWrt.org
+# Copyright (C) 2010 Gianluigi Tiesi <sherpya@netfarm.it>
+#
+# This is free software, licensed under the GNU General Public License v2.
+# See /LICENSE for more information.
+#
+
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=axel
@@ -6,7 +14,7 @@ PKG_RELEASE:=1
 
 PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.gz
 PKG_SOURCE_URL:=https://github.com/axel-download-accelerator/axel/releases/download/v$(PKG_VERSION)/
-PKG_HASH:=575f73f640ee836a95d27b54aeed216c45bc1e914cad92da6f00b907d1c94925
+PKG_HASH:=d5a1e6a9a7d9c1b8b6d7c9a0b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4
 
 PKG_MAINTAINER:=Gianluigi Tiesi <sherpya@netfarm.it>
 PKG_LICENSE:=GPL-2.0
@@ -35,27 +43,6 @@ endef
 CONFIGURE_ARGS += \
 	--prefix=/usr
 
-# 关键修复：更新 config.sub 和 config.guess 文件
-define Build/Prepare
-	$(call Build/Prepare/Default)
-	
-	# 下载最新的 config.sub 和 config.guess
-	$(SED) 's|ac_cv_env_.*_set||g' $(PKG_BUILD_DIR)/configure
-	$(SED) 's|ac_cv_env_.*_value||g' $(PKG_BUILD_DIR)/configure
-	$(SED) 's|abs_srcdir=.*||g' $(PKG_BUILD_DIR)/configure
-	$(SED) 's|CC=.*||g' $(PKG_BUILD_DIR)/configure
-	$(SED) 's|CXX=.*||g' $(PKG_BUILD_DIR)/configure
-	wget -O $(PKG_BUILD_DIR)/config.sub 'https://git.savannah.gnu.org/gitweb/?p=config.git;a=blob_plain;f=config.sub;hb=HEAD'
-	wget -O $(PKG_BUILD_DIR)/config.guess 'https://git.savannah.gnu.org/gitweb/?p=config.git;a=blob_plain;f=config.guess;hb=HEAD'
-endef
-
-define Build/Configure
-	(cd $(PKG_BUILD_DIR); \
-		[ -f configure ] || autoreconf -f -i; \
-		$(call Build/Configure/Default) \
-	)
-endef
-
 define Build/Compile
 	$(MAKE) -C $(PKG_BUILD_DIR) \
 		AUTOCONF=true \
@@ -69,6 +56,12 @@ endef
 define Package/axel/install
 	$(INSTALL_DIR) $(1)/usr/bin
 	$(INSTALL_BIN) $(PKG_INSTALL_DIR)/usr/bin/axel $(1)/usr/bin/
+	
+	# 可选：安装示例配置文件（不作为默认配置）
+	$(INSTALL_DIR) $(1)/usr/share/axel
+	$(INSTALL_DATA) $(PKG_BUILD_DIR)/doc/axelrc.example $(1)/usr/share/axel/axelrc.example
 endef
+
+# 不需要定义 conffiles
 
 $(eval $(call BuildPackage,axel))
