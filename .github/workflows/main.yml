@@ -67,7 +67,6 @@ jobs:
       run: |
         mkdir -p sdk-${{ matrix.platform }}/package/axel
         cp -R package/axel/Makefile sdk-${{ matrix.platform }}/package/axel/
-        echo "src-link axel $(pwd)/package" >> sdk-${{ matrix.platform }}/feeds.conf
     
     - name: Set up SDK environment
       run: |
